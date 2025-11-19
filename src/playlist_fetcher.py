@@ -1,4 +1,4 @@
-"""Fetch YouTube Watch Later playlist using YouTube Data API v3."""
+"""Fetch YouTube playlists using YouTube Data API v3."""
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -6,6 +6,197 @@ from googleapiclient.errors import HttpError
 
 
 logger = logging.getLogger(__name__)
+
+
+def find_playlist_by_name(service: Any, playlist_name: str, case_sensitive: bool = False) -> Optional[Dict[str, Any]]:
+    """
+    Find a playlist by name (supports partial matching).
+    
+    Args:
+        service: Authenticated YouTube Data API service
+        playlist_name: Name of the playlist to find
+        case_sensitive: Whether to match case exactly
+        
+    Returns:
+        Playlist dictionary with id, title, and itemCount, or None if not found
+    """
+    logger.info(f"Searching for playlist: '{playlist_name}'")
+    playlists = list_user_playlists(service)
+    
+    search_name = playlist_name if case_sensitive else playlist_name.lower()
+    
+    # Try exact match first
+    for playlist in playlists:
+        title = playlist['title'] if case_sensitive else playlist['title'].lower()
+        if title == search_name:
+            logger.info(f"Found exact match: '{playlist['title']}' (ID: {playlist['id']})")
+            return playlist
+    
+    # Try partial match
+    for playlist in playlists:
+        title = playlist['title'] if case_sensitive else playlist['title'].lower()
+        if search_name in title or title in search_name:
+            logger.info(f"Found partial match: '{playlist['title']}' (ID: {playlist['id']})")
+            return playlist
+    
+    logger.warning(f"Playlist '{playlist_name}' not found")
+    return None
+
+
+def list_user_playlists(service: Any) -> List[Dict[str, Any]]:
+    """
+    List all playlists for the authenticated user.
+    
+    Args:
+        service: Authenticated YouTube Data API service
+        
+    Returns:
+        List of playlist dictionaries with id, title, and itemCount
+    """
+    logger.info("Fetching user's playlists...")
+    playlists = []
+    next_page_token = None
+    
+    try:
+        while True:
+            request = service.playlists().list(
+                part='snippet,contentDetails',
+                mine=True,
+                maxResults=50,
+                pageToken=next_page_token
+            )
+            
+            response = request.execute()
+            
+            if not response.get('items'):
+                break
+            
+            for playlist in response['items']:
+                playlist_data = {
+                    'id': playlist['id'],
+                    'title': playlist['snippet'].get('title', 'Unknown'),
+                    'item_count': playlist['contentDetails'].get('itemCount', 0),
+                    'description': playlist['snippet'].get('description', ''),
+                }
+                playlists.append(playlist_data)
+            
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token:
+                break
+        
+        logger.info(f"Found {len(playlists)} playlists")
+        return playlists
+        
+    except HttpError as e:
+        logger.error(f"Error listing playlists: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error listing playlists: {e}")
+        return []
+
+
+def fetch_playlist_by_id(service: Any, playlist_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetch all videos from any YouTube playlist by ID.
+    
+    Args:
+        service: Authenticated YouTube Data API service
+        playlist_id: YouTube playlist ID
+        
+    Returns:
+        List of video dictionaries with id, title, url, and duration
+    """
+    logger.info(f"Fetching playlist with ID: {playlist_id}")
+    
+    videos = []
+    next_page_token = None
+    
+    try:
+        while True:
+            # Fetch playlist items
+            request = service.playlistItems().list(
+                part='snippet,contentDetails',
+                playlistId=playlist_id,
+                maxResults=50,  # Maximum allowed by API
+                pageToken=next_page_token
+            )
+            
+            response = request.execute()
+            
+            logger.debug(f"API response: {len(response.get('items', []))} items in this page")
+            
+            if not response.get('items'):
+                total_results = response.get('pageInfo', {}).get('totalResults', 0)
+                if total_results == 0:
+                    logger.warning("Playlist appears to be empty")
+                break
+            
+            # Get video IDs to fetch details
+            video_ids = [item['contentDetails']['videoId'] for item in response['items']]
+            logger.info(f"Found {len(video_ids)} video IDs in this page")
+            
+            # Fetch video details in batch
+            videos_response = service.videos().list(
+                part='snippet,contentDetails,statistics',
+                id=','.join(video_ids)
+            ).execute()
+            
+            logger.debug(f"Video details response: {len(videos_response.get('items', []))} videos found")
+            
+            # Map video details to our format
+            video_details = {
+                vid['id']: vid for vid in videos_response.get('items', [])
+            }
+            
+            if len(video_details) < len(video_ids):
+                logger.warning(f"Only {len(video_details)} out of {len(video_ids)} videos had details (some may be private/deleted)")
+            
+            # Combine playlist item info with video details
+            for idx, item in enumerate(response['items'], start=len(videos) + 1):
+                video_id = item['contentDetails']['videoId']
+                video_info = video_details.get(video_id)
+                
+                if not video_info:
+                    logger.warning(f"Video details not found for ID: {video_id}")
+                    continue
+                
+                # Parse duration (ISO 8601 format: PT1H2M10S)
+                duration_str = video_info['contentDetails'].get('duration', 'PT0S')
+                duration_seconds = parse_duration(duration_str)
+                
+                video_data = {
+                    'index': idx,
+                    'id': video_id,
+                    'title': video_info['snippet'].get('title', 'Unknown Title'),
+                    'url': f"https://www.youtube.com/watch?v={video_id}",
+                    'duration': duration_seconds,
+                    'uploader': video_info['snippet'].get('channelTitle', 'Unknown'),
+                    'view_count': int(video_info['statistics'].get('viewCount', 0)),
+                    'published_at': video_info['snippet'].get('publishedAt', ''),
+                }
+                videos.append(video_data)
+                logger.debug(f"Extracted: {video_data['title']}")
+            
+            # Check for next page
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token:
+                break
+            
+            logger.info(f"Fetched {len(videos)} videos so far...")
+        
+        logger.info(f"Successfully fetched {len(videos)} videos from playlist")
+        return videos
+        
+    except HttpError as e:
+        logger.error(f"HTTP error while fetching playlist: {e}")
+        if e.resp.status == 403:
+            logger.error("Access forbidden. Check your OAuth scopes and credentials.")
+        elif e.resp.status == 404:
+            logger.error("Playlist not found. Check the playlist ID.")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error while fetching playlist: {e}")
+        raise
 
 
 def get_watch_later_playlist_id(service: Any) -> Optional[str]:
@@ -83,22 +274,44 @@ def get_watch_later_playlist_id(service: Any) -> Optional[str]:
         return None
 
 
-def fetch_watch_later_playlist(service: Any) -> List[Dict[str, Any]]:
+def fetch_watch_later_playlist(service: Any, playlist_name: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Fetch all videos from YouTube Watch Later playlist using YouTube Data API.
+    Tries multiple methods to find the Watch Later playlist.
     
     Args:
         service: Authenticated YouTube Data API service
+        playlist_name: Optional playlist name to search for (e.g., "Do obejrzenia", "Watch Later")
         
     Returns:
         List of video dictionaries with id, title, url, and duration
     """
     logger.info("Starting to fetch Watch Later playlist...")
     
-    # Get Watch Later playlist ID
-    playlist_id = get_watch_later_playlist_id(service)
+    playlist_id = None
+    
+    # Method 1: Try common Watch Later names first (before trying WL)
+    common_names = ["Do obejrzenia", "Watch Later", "À regarder", "Zu sehen", "Para ver"]
+    if playlist_name:
+        # If specific name provided, try it first
+        common_names.insert(0, playlist_name)
+    
+    for name in common_names:
+        logger.info(f"Trying to find playlist by name: '{name}'")
+        playlist = find_playlist_by_name(service, name)
+        if playlist and playlist['item_count'] > 0:
+            playlist_id = playlist['id']
+            logger.info(f"Found '{playlist['title']}' with {playlist['item_count']} items")
+            break
+    
+    # Method 2: Try to get from channel's relatedPlaylists (WL)
+    if not playlist_id:
+        logger.info("Trying to get Watch Later from channel's relatedPlaylists...")
+        playlist_id = get_watch_later_playlist_id(service)
+    
     if not playlist_id:
         logger.error("Could not retrieve Watch Later playlist ID")
+        logger.info("Try using --playlist-name or --playlist-id to specify a playlist")
         return []
     
     videos = []

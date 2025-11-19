@@ -11,6 +11,7 @@
   "log_file": "./data/download.log",
   "auto_clean_watch_later": false,
   "resume_downloads": true,
-  "format_preference": "mp4"
+  "format_preference": "mp4",
+  "default_playlist_name": "Do obejrzenia"
 }
 

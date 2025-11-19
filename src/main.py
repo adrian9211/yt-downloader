@@ -13,7 +13,13 @@ try:
         load_playlist_data
     )
     from .oauth_auth import get_authenticated_service
-    from .playlist_fetcher import fetch_watch_later_playlist, remove_video_from_watch_later
+    from .playlist_fetcher import (
+        fetch_watch_later_playlist,
+        fetch_playlist_by_id,
+        find_playlist_by_name,
+        list_user_playlists,
+        remove_video_from_watch_later
+    )
     from .downloader import download_playlist
 except ImportError:
     # Allow running as script
@@ -27,7 +33,13 @@ except ImportError:
         load_playlist_data
     )
     from oauth_auth import get_authenticated_service
-    from playlist_fetcher import fetch_watch_later_playlist, remove_video_from_watch_later
+    from playlist_fetcher import (
+        fetch_watch_later_playlist,
+        fetch_playlist_by_id,
+        find_playlist_by_name,
+        list_user_playlists,
+        remove_video_from_watch_later
+    )
     from downloader import download_playlist
 
 
@@ -52,6 +64,21 @@ def main():
         action='store_true',
         help='Only download from cached playlist, do not fetch'
     )
+    parser.add_argument(
+        '--playlist-id',
+        type=str,
+        help='Specific playlist ID to download from (instead of Watch Later)'
+    )
+    parser.add_argument(
+        '--list-playlists',
+        action='store_true',
+        help='List all available playlists and exit'
+    )
+    parser.add_argument(
+        '--playlist-name',
+        type=str,
+        help='Playlist name to search for (e.g., "Do obejrzenia", "Watch Later")'
+    )
     
     args = parser.parse_args()
     
@@ -72,7 +99,7 @@ def main():
     
     # Authenticate with YouTube API
     youtube_service = None
-    if not args.download_only:
+    if not args.download_only or args.list_playlists:
         try:
             logger.info("Authenticating with YouTube Data API...")
             youtube_service = get_authenticated_service(
@@ -85,13 +112,48 @@ def main():
             logger.error("Please ensure you have set up OAuth credentials. See README.md for instructions.")
             sys.exit(1)
     
+    # List playlists if requested
+    if args.list_playlists:
+        logger.info("=" * 60)
+        logger.info("Available Playlists:")
+        logger.info("=" * 60)
+        playlists = list_user_playlists(youtube_service)
+        for i, playlist in enumerate(playlists, 1):
+            logger.info(f"{i}. {playlist['title']}")
+            logger.info(f"   ID: {playlist['id']}")
+            logger.info(f"   Videos: {playlist['item_count']}")
+            logger.info("")
+        logger.info("=" * 60)
+        logger.info("To download from a playlist, use: --playlist-id <PLAYLIST_ID>")
+        logger.info("Example: python3 run.py --playlist-id PL1H29fb3JfEbTyxecYaWnQCooooAVGXPx")
+        sys.exit(0)
+    
     # Fetch playlist
     playlist_data = []
     
     if not args.download_only:
         try:
-            logger.info("Fetching Watch Later playlist...")
-            playlist_data = fetch_watch_later_playlist(youtube_service)
+            if args.playlist_id:
+                # Fetch specific playlist by ID
+                logger.info(f"Fetching playlist with ID: {args.playlist_id}")
+                playlist_data = fetch_playlist_by_id(youtube_service, args.playlist_id)
+            elif args.playlist_name:
+                # Fetch playlist by name
+                logger.info(f"Searching for playlist: '{args.playlist_name}'")
+                playlist = find_playlist_by_name(youtube_service, args.playlist_name)
+                if playlist:
+                    logger.info(f"Found playlist: '{playlist['title']}' with {playlist['item_count']} items")
+                    playlist_data = fetch_playlist_by_id(youtube_service, playlist['id'])
+                else:
+                    logger.error(f"Playlist '{args.playlist_name}' not found")
+                    logger.info("Use --list-playlists to see all available playlists")
+                    sys.exit(1)
+            else:
+                # Default: Fetch Watch Later playlist (tries multiple methods)
+                logger.info("Fetching Watch Later playlist...")
+                # Try to use default playlist name from config
+                default_name = config.get('default_playlist_name')
+                playlist_data = fetch_watch_later_playlist(youtube_service, playlist_name=default_name)
             
             if not playlist_data:
                 logger.warning("No videos found in Watch Later playlist")

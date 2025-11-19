@@ -4,7 +4,8 @@ A local Python tool to automatically download all videos from your YouTube Watch
 
 ## Features
 
-- ✅ **Automatic Playlist Fetching**: Retrieves all videos from your YouTube Watch Later playlist
+- ✅ **Automatic Playlist Fetching**: Retrieves all videos from your YouTube Watch Later playlist or any other playlist
+- ✅ **Multiple Playlist Support**: Download from Watch Later or any of your custom playlists
 - ✅ **High Quality Downloads**: Downloads videos in 720p or higher resolution (MP4 format preferred)
 - ✅ **Concurrent Downloads**: Supports multiple simultaneous downloads (configurable)
 - ✅ **Resume Support**: Skips already downloaded videos automatically
@@ -157,30 +158,65 @@ python3 -m src.main
 
 ```bash
 # Only fetch playlist without downloading
-python -m src.main --fetch-only
+python3 run.py --fetch-only
 
 # Only download from cached playlist (skip fetching)
-python -m src.main --download-only
+python3 run.py --download-only
 
 # Use custom config file
-python -m src.main --config /path/to/custom/config.json
+python3 run.py --config /path/to/custom/config.json
+
+# List all available playlists
+python3 run.py --list-playlists
+
+# Download from a specific playlist (instead of Watch Later)
+python3 run.py --playlist-id <PLAYLIST_ID>
+
+# Example: Download from "Muzyka" playlist
+python3 run.py --playlist-id PL1H29fb3JfEbTyxecYaWnQCooooAVGXPx
 ```
 
 ### Workflow
 
 1. **First Run**: The tool will:
-   - Fetch your Watch Later playlist
+   - Fetch your Watch Later playlist (or specified playlist)
    - Save playlist data to `data/playlist.json`
    - Start downloading all videos
 
 2. **Subsequent Runs**: The tool will:
-   - Check for new videos in Watch Later
+   - Check for new videos in the playlist
    - Skip already downloaded videos (if `resume_downloads` is enabled)
    - Download only new videos
 
 3. **Interrupted Downloads**: If the download is interrupted:
    - Run the tool again - it will automatically resume
    - Already downloaded videos will be skipped
+
+### Downloading from Other Playlists
+
+If Watch Later is empty or you want to download from a different playlist:
+
+1. **List all available playlists**:
+   ```bash
+   python3 run.py --list-playlists
+   ```
+
+2. **Download from a specific playlist**:
+   ```bash
+   python3 run.py --playlist-id <PLAYLIST_ID>
+   ```
+
+   Example:
+   ```bash
+   # Download from "Muzyka" playlist (287 videos)
+   python3 run.py --playlist-id PL1H29fb3JfEbTyxecYaWnQCooooAVGXPx
+   ```
+
+3. **You can combine options**:
+   ```bash
+   # Fetch playlist info only (no download)
+   python3 run.py --playlist-id PL1H29fb3JfEbTyxecYaWnQCooooAVGXPx --fetch-only
+   ```
 
 ## File Naming
 
