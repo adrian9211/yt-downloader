@@ -7,7 +7,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 .eggs/
 lib/
@@ -25,7 +24,6 @@ venv/
 env/
 ENV/
 .venv
-venv/
 
 # IDE
 .vscode/
@@ -34,12 +32,17 @@ venv/
 *.swo
 *~
 
-# Project specific
+# Project specific - Secret files
 credentials.json
 data/token.json
-data/
-downloads/
+data/downloaded_videos.json
 *.log
+
+# Data files (may contain sensitive info)
+data/
+
+# Downloads folder
+downloads/
 
 # OS
 .DS_Store

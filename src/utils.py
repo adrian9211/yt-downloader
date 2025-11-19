@@ -5,6 +5,7 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime
+import logging
 from typing import Dict, Any, Optional
 
 
@@ -126,29 +127,123 @@ def load_playlist_data(data_file: str) -> list:
         return json.load(f)
 
 
-def get_downloaded_videos(download_path: str) -> set:
+def load_download_tracker(tracker_file: str) -> Dict[str, Dict[str, Any]]:
     """
-    Get set of already downloaded video IDs from filenames.
+    Load the download tracker database.
     
     Args:
-        download_path: Path to downloads directory
+        tracker_file: Path to the tracker JSON file
+        
+    Returns:
+        Dictionary mapping video_id to download info
+    """
+    tracker_path = Path(tracker_file)
+    if not tracker_path.exists():
+        return {}
+    
+    try:
+        with open(tracker_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Error loading download tracker: {e}")
+        return {}
+
+
+def save_download_tracker(tracker: Dict[str, Dict[str, Any]], tracker_file: str) -> None:
+    """
+    Save the download tracker database.
+    
+    Args:
+        tracker: Dictionary mapping video_id to download info
+        tracker_file: Path to the tracker JSON file
+    """
+    tracker_path = Path(tracker_file)
+    tracker_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(tracker_path, 'w', encoding='utf-8') as f:
+        json.dump(tracker, f, indent=2, ensure_ascii=False)
+
+
+def mark_video_downloaded(
+    video_id: str,
+    video_title: str,
+    filepath: str,
+    tracker_file: str,
+    file_size: Optional[int] = None
+) -> None:
+    """
+    Mark a video as downloaded in the tracker.
+    
+    Args:
+        video_id: YouTube video ID
+        video_title: Video title
+        filepath: Path where the file was saved
+        tracker_file: Path to the tracker JSON file
+        file_size: Optional file size in bytes
+    """
+    tracker = load_download_tracker(tracker_file)
+    
+    tracker[video_id] = {
+        'video_id': video_id,
+        'title': video_title,
+        'filepath': filepath,
+        'download_date': datetime.now().isoformat(),
+        'file_size': file_size,
+        'status': 'downloaded'
+    }
+    
+    save_download_tracker(tracker, tracker_file)
+
+
+def is_video_downloaded(video_id: str, tracker_file: str) -> bool:
+    """
+    Check if a video has been downloaded (according to tracker).
+    
+    Args:
+        video_id: YouTube video ID
+        tracker_file: Path to the tracker JSON file
+        
+    Returns:
+        True if video is in tracker, False otherwise
+    """
+    tracker = load_download_tracker(tracker_file)
+    return video_id in tracker and tracker[video_id].get('status') == 'downloaded'
+
+
+def get_downloaded_videos(tracker_file: str, download_path: Optional[str] = None) -> set:
+    """
+    Get set of already downloaded video IDs from the tracker.
+    Optionally also checks local files for backwards compatibility.
+    
+    Args:
+        tracker_file: Path to the tracker JSON file
+        download_path: Optional path to downloads directory (for backwards compatibility)
         
     Returns:
         Set of video IDs that have been downloaded
     """
-    download_dir = Path(download_path)
-    if not download_dir.exists():
-        return set()
-    
+    tracker = load_download_tracker(tracker_file)
     downloaded = set()
-    for file in download_dir.glob("*.mp4"):
-        # Extract video ID from filename if present
-        # Format: <index> - <title>_<video_id>.mp4 or similar
-        filename = file.stem
-        # Try to find YouTube video ID pattern (11 characters)
-        video_id_match = re.search(r'([a-zA-Z0-9_-]{11})$', filename)
-        if video_id_match:
-            downloaded.add(video_id_match.group(1))
+    
+    # Get from tracker
+    for video_id, info in tracker.items():
+        if info.get('status') == 'downloaded':
+            downloaded.add(video_id)
+    
+    # Also check local files for backwards compatibility (if download_path provided)
+    if download_path:
+        download_dir = Path(download_path)
+        if download_dir.exists():
+            for file in download_dir.glob("*.mp4"):
+                filename = file.stem
+                # Try to find YouTube video ID pattern (11 characters)
+                video_id_match = re.search(r'([a-zA-Z0-9_-]{11})$', filename)
+                if video_id_match:
+                    video_id = video_id_match.group(1)
+                    if video_id not in downloaded:
+                        # Found a file that's not in tracker - add it
+                        downloaded.add(video_id)
+                        # Optionally update tracker (but we don't have title info here)
     
     return downloaded
 

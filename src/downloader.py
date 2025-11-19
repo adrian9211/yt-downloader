@@ -3,6 +3,7 @@ import yt_dlp
 import logging
 import time
 import os
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -48,7 +49,8 @@ def download_video(
     format_preference: str = "mp4",
     retry_attempts: int = 3,
     retry_delay: int = 5,
-    index: Optional[int] = None
+    index: Optional[int] = None,
+    tracker_file: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Download a single video with retry logic.
@@ -61,6 +63,7 @@ def download_video(
         retry_attempts: Number of retry attempts on failure
         retry_delay: Delay between retries in seconds
         index: Optional index for filename
+        tracker_file: Path to download tracker file
         
     Returns:
         Dictionary with download result: success, filepath, error
@@ -71,9 +74,20 @@ def download_video(
     
     # Sanitize filename
     try:
-        from .utils import sanitize_filename
+        from .utils import sanitize_filename, is_video_downloaded, mark_video_downloaded
     except ImportError:
-        from utils import sanitize_filename
+        from utils import sanitize_filename, is_video_downloaded, mark_video_downloaded
+    
+    # Check tracker first (even if file doesn't exist locally)
+    if tracker_file and is_video_downloaded(video_id, tracker_file):
+        logger.info(f"Video already downloaded (tracked): {video_title}")
+        return {
+            'success': True,
+            'filepath': None,  # File may have been deleted locally
+            'skipped': True,
+            'video_id': video_id,
+            'video_title': video_title
+        }
     
     # Create filename: <index> - <title>.mp4
     if index is not None:
@@ -83,9 +97,16 @@ def download_video(
     
     filepath = Path(download_path) / filename
     
-    # Check if already downloaded
+    # Also check if file exists locally (backwards compatibility)
     if filepath.exists():
-        logger.info(f"Video already downloaded: {filename}")
+        logger.info(f"Video file exists locally: {filename}")
+        # Mark in tracker if not already there
+        if tracker_file:
+            try:
+                file_size = filepath.stat().st_size
+                mark_video_downloaded(video_id, video_title, str(filepath), tracker_file, file_size)
+            except Exception as e:
+                logger.warning(f"Could not update tracker: {e}")
         return {
             'success': True,
             'filepath': str(filepath),
@@ -139,6 +160,15 @@ def download_video(
                     final_path = downloaded_file.with_suffix('.mp4')
                     downloaded_file.rename(final_path)
                     downloaded_file = final_path
+                
+                # Mark as downloaded in tracker
+                if tracker_file:
+                    try:
+                        file_size = downloaded_file.stat().st_size
+                        mark_video_downloaded(video_id, video_title, str(downloaded_file), tracker_file, file_size)
+                        logger.debug(f"Marked video {video_id} as downloaded in tracker")
+                    except Exception as e:
+                        logger.warning(f"Could not update tracker: {e}")
                 
                 logger.info(f"Successfully downloaded: {filename}")
                 return {
@@ -206,7 +236,8 @@ def download_playlist(
     max_concurrent: int = 3,
     retry_attempts: int = 3,
     retry_delay: int = 5,
-    resume: bool = True
+    resume: bool = True,
+    tracker_file: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Download multiple videos with concurrent downloads.
@@ -220,6 +251,7 @@ def download_playlist(
         retry_attempts: Number of retry attempts per video
         retry_delay: Delay between retries
         resume: Skip already downloaded videos
+        tracker_file: Path to download tracker file
         
     Returns:
         Dictionary with download statistics
@@ -232,14 +264,27 @@ def download_playlist(
             from .utils import get_downloaded_videos
         except ImportError:
             from utils import get_downloaded_videos
-        downloaded_ids = get_downloaded_videos(download_path)
+        # Use tracker file if provided, otherwise fall back to checking files
+        if tracker_file:
+            downloaded_ids = get_downloaded_videos(tracker_file, download_path)
+        else:
+            # Fallback: check local files only (backwards compatibility)
+            download_dir = Path(download_path)
+            downloaded_ids = set()
+            if download_dir.exists():
+                for file in download_dir.glob("*.mp4"):
+                    filename = file.stem
+                    video_id_match = re.search(r'([a-zA-Z0-9_-]{11})$', filename)
+                    if video_id_match:
+                        downloaded_ids.add(video_id_match.group(1))
+        
         videos_to_download = [
             v for v in videos 
             if v.get('id', '') not in downloaded_ids
         ]
         skipped_count = len(videos) - len(videos_to_download)
         if skipped_count > 0:
-            logger.info(f"Skipping {skipped_count} already downloaded videos")
+            logger.info(f"Skipping {skipped_count} already downloaded videos (tracked)")
         videos = videos_to_download
     
     if not videos:
@@ -269,7 +314,8 @@ def download_playlist(
                 format_preference,
                 retry_attempts,
                 retry_delay,
-                video.get('index')
+                video.get('index'),
+                tracker_file
             ): video
             for video in videos
         }

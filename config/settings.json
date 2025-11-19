@@ -9,6 +9,7 @@
   "oauth_token_file": "./data/token.json",
   "playlist_data_file": "./data/playlist.json",
   "log_file": "./data/download.log",
+  "download_tracker_file": "./data/downloaded_videos.json",
   "auto_clean_watch_later": false,
   "resume_downloads": true,
   "format_preference": "mp4",
