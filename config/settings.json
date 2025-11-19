@@ -2,6 +2,7 @@
   "download_path": "./downloads",
   "resolution_preference": "720p",
   "min_resolution": "720p",
+  "max_resolution": "1080p",
   "max_concurrent_downloads": 3,
   "retry_attempts": 3,
   "retry_delay_seconds": 5,

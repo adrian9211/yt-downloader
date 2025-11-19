@@ -104,6 +104,7 @@ Edit `config/settings.json` to customize the downloader:
   "download_path": "./downloads",
   "resolution_preference": "720p",
   "min_resolution": "720p",
+  "max_resolution": "1080p",
   "max_concurrent_downloads": 3,
   "retry_attempts": 3,
   "retry_delay_seconds": 5,
@@ -111,17 +112,20 @@ Edit `config/settings.json` to customize the downloader:
   "oauth_token_file": "./data/token.json",
   "playlist_data_file": "./data/playlist.json",
   "log_file": "./data/download.log",
+  "download_tracker_file": "./data/downloaded_videos.json",
   "auto_clean_watch_later": false,
   "resume_downloads": true,
-  "format_preference": "mp4"
+  "format_preference": "mp4",
+  "default_playlist_name": "Do obejrzenia"
 }
 ```
 
 ### Configuration Options
 
 - **download_path**: Directory where videos will be saved (supports `~` for home directory)
-- **resolution_preference**: Preferred resolution (e.g., "720p", "1080p")
+- **resolution_preference**: Preferred resolution (e.g., "720p", "1080p") - used for preference only
 - **min_resolution**: Minimum acceptable resolution (default: "720p")
+- **max_resolution**: Maximum resolution cap (default: "1080p") - **prevents 4K downloads**
 - **max_concurrent_downloads**: Number of videos to download simultaneously (1-5 recommended)
 - **retry_attempts**: Number of times to retry failed downloads
 - **retry_delay_seconds**: Seconds to wait between retry attempts

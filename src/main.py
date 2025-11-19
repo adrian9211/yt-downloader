@@ -193,6 +193,7 @@ def main():
             videos=playlist_data,
             download_path=config['download_path'],
             min_resolution=config.get('min_resolution', '720p'),
+            max_resolution=config.get('max_resolution', '1080p'),
             format_preference=config.get('format_preference', 'mp4'),
             max_concurrent=config.get('max_concurrent_downloads', 3),
             retry_attempts=config.get('retry_attempts', 3),

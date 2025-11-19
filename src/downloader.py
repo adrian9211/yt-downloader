@@ -46,6 +46,7 @@ def download_video(
     video: Dict[str, Any],
     download_path: str,
     min_resolution: str = "720p",
+    max_resolution: str = "1080p",
     format_preference: str = "mp4",
     retry_attempts: int = 3,
     retry_delay: int = 5,
@@ -59,6 +60,7 @@ def download_video(
         video: Video dictionary with id, title, url
         download_path: Directory to save the video
         min_resolution: Minimum resolution (e.g., "720p")
+        max_resolution: Maximum resolution (e.g., "1080p") - prevents 4K downloads
         format_preference: Preferred format (e.g., "mp4")
         retry_attempts: Number of retry attempts on failure
         retry_delay: Delay between retries in seconds
@@ -116,10 +118,16 @@ def download_video(
         }
     
     # Configure format selector
-    # Prefer: best video+audio merged, at least 720p, prefer mp4
-    format_selector = f"bestvideo[height>={min_resolution.replace('p', '')}]+bestaudio/best[height>={min_resolution.replace('p', '')}]"
+    # Prefer: best video+audio merged, between min and max resolution, prefer mp4
+    min_height = int(min_resolution.replace('p', ''))
+    max_height = int(max_resolution.replace('p', ''))
+    
+    # Format selector: best video between min and max resolution + best audio
+    format_selector = f"bestvideo[height>={min_height}][height<={max_height}]+bestaudio/best[height>={min_height}][height<={max_height}]"
     if format_preference.lower() == "mp4":
-        format_selector += "/best[ext=mp4]/best"
+        format_selector += "/best[ext=mp4][height<={max_height}]/best[height<={max_height}]"
+    
+    logger.debug(f"Format selector: {format_selector} (resolution: {min_resolution} to {max_resolution})")
     
     # Configure yt-dlp options
     ydl_opts = {
@@ -232,6 +240,7 @@ def download_playlist(
     videos: list,
     download_path: str,
     min_resolution: str = "720p",
+    max_resolution: str = "1080p",
     format_preference: str = "mp4",
     max_concurrent: int = 3,
     retry_attempts: int = 3,
@@ -246,6 +255,7 @@ def download_playlist(
         videos: List of video dictionaries
         download_path: Directory to save videos
         min_resolution: Minimum resolution
+        max_resolution: Maximum resolution (prevents 4K downloads)
         format_preference: Preferred format
         max_concurrent: Maximum concurrent downloads
         retry_attempts: Number of retry attempts per video
@@ -311,6 +321,7 @@ def download_playlist(
                 video,
                 download_path,
                 min_resolution,
+                max_resolution,
                 format_preference,
                 retry_attempts,
                 retry_delay,
