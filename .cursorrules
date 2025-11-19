@@ -1,0 +1,91 @@
+Cursor AI – Project Instructions: YouTube Watch Later Downloader (Local Tool)
+Project Summary
+Build a local tool that can automatically:
+Access my YouTube Watch Later playlist.
+Retrieve all video URLs.
+Download each video in at least 720p resolution.
+Save all files to a folder on my machine (e.g., /downloads/youtube_watch_later/).
+The tool is for private personal use only.
+Constraints & Notes
+Must run locally (not hosted online).
+Should avoid storing any login credentials in plain text.
+Prefer Python or Node.js (whichever Cursor recommends).
+Use well-maintained libraries (e.g., yt-dlp for downloads).
+Ideally support a config file where I can set:
+Download path
+Resolution preference
+Maximum concurrent downloads
+Should handle:
+Duplicates
+Failed downloads (retry)
+Videos unavailable or private
+Authentication
+YouTube OAuth is complex for CLI apps.
+Preferred approaches (Cursor should choose the best and set up):
+Option A — Use cookies.txt from YouTube
+Extract cookies from browser (Chrome/Firefox extension).
+Tool uses cookies for playlist access and download.
+Option B — OAuth 2.0
+If Cursor suggests OAuth, prepare:
+Google Cloud OAuth app
+Local redirect handler
+Token storage
+Core Requirements
+1. Import Watch Later list
+Tool must:
+Read the entire Watch Later playlist
+Extract video titles + URLs
+Store them (JSON or local DB)
+2. Download videos
+Each video must be downloaded as:
+Minimum resolution: 720p
+Prefer best available quality that is ≥720p
+MP4 format if possible
+If not available, fallback to:
+Merged formats (video + audio)
+3. File naming rules
+Format:
+<index> - <video_title>.mp4
+Avoid invalid filename characters.
+4. Logging
+Log file should include:
+Start/end time
+Success downloads
+Failed downloads
+Videos already downloaded
+Optional Features (if Cursor can implement)
+A. Resume interrupted downloads
+Store progress and skip completed ones.
+B. Auto-clean Watch Later
+After successful download, automatically remove the video from Watch Later (optional toggle).
+C. GUI
+Simple Electron/Vue interface (optional future step).
+Folder Structure (Cursor may adjust as needed)
+youtube-downloader/
+│
+├── config/
+│   └── settings.json
+│
+├── data/
+│   └── playlist.json
+│
+├── downloads/
+│
+├── src/
+│   ├── playlist_fetcher.py (or .js)
+│   ├── downloader.py (or .js)
+│   ├── utils.py
+│   └── main.py
+│
+└── README.md
+Deliverables Cursor Should Produce
+Fully working script/tool that can:
+Read playlist
+Download everything automatically
+Configuration system
+Instructions for:
+Setting up cookies
+Running the tool
+Optional:
+UI
+Cron/automation script

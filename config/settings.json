@@ -1,0 +1,16 @@
+{
+  "download_path": "./downloads",
+  "resolution_preference": "720p",
+  "min_resolution": "720p",
+  "max_concurrent_downloads": 3,
+  "retry_attempts": 3,
+  "retry_delay_seconds": 5,
+  "oauth_credentials_file": "./credentials.json",
+  "oauth_token_file": "./data/token.json",
+  "playlist_data_file": "./data/playlist.json",
+  "log_file": "./data/download.log",
+  "auto_clean_watch_later": false,
+  "resume_downloads": true,
+  "format_preference": "mp4"
+}
+
