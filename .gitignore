@@ -37,6 +37,7 @@ credentials.json
 data/token.json
 data/downloaded_videos.json
 *.log
+.cursorrules
 
 # Data files (may contain sensitive info)
 data/
