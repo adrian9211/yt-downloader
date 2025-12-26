@@ -199,7 +199,9 @@ def main():
             retry_attempts=config.get('retry_attempts', 3),
             retry_delay=config.get('retry_delay_seconds', 5),
             resume=config.get('resume_downloads', True),
-            tracker_file=config.get('download_tracker_file', './data/downloaded_videos.json')
+            tracker_file=config.get('download_tracker_file', './data/downloaded_videos.json'),
+            cookies_file=config.get('cookies_file'),
+            cookies_from_browser=config.get('cookies_from_browser')
         )
         
         # Log summary

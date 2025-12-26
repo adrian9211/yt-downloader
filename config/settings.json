@@ -1,8 +1,8 @@
 {
   "download_path": "./downloads",
   "resolution_preference": "720p",
-  "min_resolution": "720p",
-  "max_resolution": "1080p",
+  "min_resolution": "480p",
+  "max_resolution": "720p",
   "max_concurrent_downloads": 3,
   "retry_attempts": 3,
   "retry_delay_seconds": 5,
@@ -14,6 +14,7 @@
   "auto_clean_watch_later": false,
   "resume_downloads": true,
   "format_preference": "mp4",
-  "default_playlist_name": "Do obejrzenia"
+  "default_playlist_name": "Do obejrzenia",
+  "cookies_file": null,
+  "cookies_from_browser": null
 }
-

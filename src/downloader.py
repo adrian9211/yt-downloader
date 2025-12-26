@@ -51,7 +51,9 @@ def download_video(
     retry_attempts: int = 3,
     retry_delay: int = 5,
     index: Optional[int] = None,
-    tracker_file: Optional[str] = None
+    tracker_file: Optional[str] = None,
+    cookies_file: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Download a single video with retry logic.
@@ -66,6 +68,8 @@ def download_video(
         retry_delay: Delay between retries in seconds
         index: Optional index for filename
         tracker_file: Path to download tracker file
+        cookies_file: Path to Netscape formatted cookies file
+        cookies_from_browser: Browser to extract cookies from (e.g., 'chrome', 'firefox')
         
     Returns:
         Dictionary with download result: success, filepath, error
@@ -125,7 +129,7 @@ def download_video(
     # Format selector: best video between min and max resolution + best audio
     format_selector = f"bestvideo[height>={min_height}][height<={max_height}]+bestaudio/best[height>={min_height}][height<={max_height}]"
     if format_preference.lower() == "mp4":
-        format_selector += "/best[ext=mp4][height<={max_height}]/best[height<={max_height}]"
+        format_selector += f"/best[ext=mp4][height<={max_height}]/best[height<={max_height}]"
     
     logger.debug(f"Format selector: {format_selector} (resolution: {min_resolution} to {max_resolution})")
     
@@ -138,6 +142,12 @@ def download_video(
         'no_warnings': False,
         'progress_hooks': [DownloadProgressHook(video_title, logger)],
     }
+    
+    # Add authentication options
+    if cookies_file:
+        ydl_opts['cookiefile'] = cookies_file
+    if cookies_from_browser:
+        ydl_opts['cookiesfrombrowser'] = (cookies_from_browser, None, None, None)
     
     # Retry logic
     last_error = None
@@ -246,7 +256,9 @@ def download_playlist(
     retry_attempts: int = 3,
     retry_delay: int = 5,
     resume: bool = True,
-    tracker_file: Optional[str] = None
+    tracker_file: Optional[str] = None,
+    cookies_file: Optional[str] = None,
+    cookies_from_browser: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Download multiple videos with concurrent downloads.
@@ -262,6 +274,8 @@ def download_playlist(
         retry_delay: Delay between retries
         resume: Skip already downloaded videos
         tracker_file: Path to download tracker file
+        cookies_file: Path to cookies file
+        cookies_from_browser: Browser to extract cookies from
         
     Returns:
         Dictionary with download statistics
@@ -326,7 +340,9 @@ def download_playlist(
                 retry_attempts,
                 retry_delay,
                 video.get('index'),
-                tracker_file
+                tracker_file,
+                cookies_file,
+                cookies_from_browser
             ): video
             for video in videos
         }
