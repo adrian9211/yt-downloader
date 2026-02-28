@@ -13,6 +13,8 @@
   "download_tracker_file": "./data/downloaded_videos.json",
   "auto_clean_watch_later": false,
   "resume_downloads": true,
+  "audio_only": false,
+  "audio_format": "flac",
   "format_preference": "mp4",
   "default_playlist_name": "Do obejrzenia",
   "cookies_file": null,

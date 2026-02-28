@@ -53,7 +53,9 @@ def download_video(
     index: Optional[int] = None,
     tracker_file: Optional[str] = None,
     cookies_file: Optional[str] = None,
-    cookies_from_browser: Optional[str] = None
+    cookies_from_browser: Optional[str] = None,
+    audio_only: bool = False,
+    audio_format: str = "best"
 ) -> Dict[str, Any]:
     """
     Download a single video with retry logic.
@@ -70,6 +72,8 @@ def download_video(
         tracker_file: Path to download tracker file
         cookies_file: Path to Netscape formatted cookies file
         cookies_from_browser: Browser to extract cookies from (e.g., 'chrome', 'firefox')
+        audio_only: If True, download only audio
+        audio_format: Audio format preference (e.g. "best", "mp3", "m4a")
         
     Returns:
         Dictionary with download result: success, filepath, error
@@ -95,53 +99,122 @@ def download_video(
             'video_title': video_title
         }
     
-    # Create filename: <index> - <title>.mp4
+    # Create filename: <index> - <title>.<ext>
+    # Note: Extension will be added/changed by yt-dlp
     if index is not None:
-        filename = f"{index:04d} - {sanitize_filename(video_title)}.mp4"
+        filename_base = f"{index:04d} - {sanitize_filename(video_title)}"
     else:
-        filename = f"{sanitize_filename(video_title)}.mp4"
+        filename_base = f"{sanitize_filename(video_title)}"
     
-    filepath = Path(download_path) / filename
+    if audio_only:
+        # For audio, the extension depends on what we convert it to
+        # We'll rely on yt-dlp to name it correctly with the extension
+        filename_tmpl = f"{filename_base}.%(ext)s"
+        # We anticipate the final extension based on preference
+        if audio_format and audio_format != 'best':
+            final_ext = f".{audio_format}"
+        else:
+             # If best, it could be anything, but we'll try to guess or handle it
+             pass
+    else:
+        filename_tmpl = f"{filename_base}.%(ext)s"
     
-    # Also check if file exists locally (backwards compatibility)
-    if filepath.exists():
-        logger.info(f"Video file exists locally: {filename}")
+    # We construct the path for yt-dlp outtmpl
+    outtmpl_path = str(Path(download_path) / filename_tmpl)
+    
+    # Check if file exists locally with expected extension
+    # This is a bit tricky for audio since we don't know the final extension for sure yet if using "best"
+    # But for video we expect mp4
+    # Check if file exists locally with expected extension
+    # If using audio conversion, we expect the target format
+    expected_filepath = None
+    
+    if audio_only:
+        if audio_format and audio_format != 'best':
+             expected_filepath = (Path(download_path) / filename_base).with_suffix(f".{audio_format}")
+    else:
+         expected_filepath = (Path(download_path) / filename_base).with_suffix('.mp4')
+
+    if expected_filepath and expected_filepath.exists():
+        logger.info(f"Video file exists locally: {expected_filepath.name}")
         # Mark in tracker if not already there
         if tracker_file:
             try:
-                file_size = filepath.stat().st_size
-                mark_video_downloaded(video_id, video_title, str(filepath), tracker_file, file_size)
+                file_size = expected_filepath.stat().st_size
+                mark_video_downloaded(video_id, video_title, str(expected_filepath), tracker_file, file_size)
             except Exception as e:
                 logger.warning(f"Could not update tracker: {e}")
         return {
             'success': True,
-            'filepath': str(filepath),
+            'filepath': str(expected_filepath),
             'skipped': True,
             'video_id': video_id,
             'video_title': video_title
         }
     
+    # Check for other common audio extensions if audio_only
+    if audio_only:
+        common_audio_exts = ['.mp3', '.m4a', '.webm', '.flac', '.wav', '.opus']
+        for ext in common_audio_exts:
+            check_path = (Path(download_path) / filename_base).with_suffix(ext)
+            if check_path.exists():
+                logger.info(f"Audio file exists locally: {check_path.name}")
+                if tracker_file:
+                    try:
+                        file_size = check_path.stat().st_size
+                        mark_video_downloaded(video_id, video_title, str(check_path), tracker_file, file_size)
+                    except Exception:
+                        pass
+                return {
+                    'success': True,
+                    'filepath': str(check_path),
+                    'skipped': True,
+                    'video_id': video_id,
+                    'video_title': video_title
+                }
+    
     # Configure format selector
-    # Prefer: best video+audio merged, between min and max resolution, prefer mp4
-    min_height = int(min_resolution.replace('p', ''))
-    max_height = int(max_resolution.replace('p', ''))
-    
-    # Format selector: best video between min and max resolution + best audio
-    format_selector = f"bestvideo[height>={min_height}][height<={max_height}]+bestaudio/best[height>={min_height}][height<={max_height}]"
-    if format_preference.lower() == "mp4":
-        format_selector += f"/best[ext=mp4][height<={max_height}]/best[height<={max_height}]"
-    
-    logger.debug(f"Format selector: {format_selector} (resolution: {min_resolution} to {max_resolution})")
+    if audio_only:
+        # Best audio quality
+        format_selector = "bestaudio/best"
+        logger.debug(f"Audio-only mode. Format selector: {format_selector}")
+        
+        # Add post-processors for audio conversion
+        if audio_format and audio_format != 'best':
+            postprocessors = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': audio_format,
+                'preferredquality': '192', # 192 is decent default, but for flac it is ignored (lossless)
+            }]
+            logger.debug(f"Adding audio post-processor for format: {audio_format}")
+        else:
+             postprocessors = []
+    else:
+        # Prefer: best video+audio merged, between min and max resolution, prefer mp4
+        min_height = int(min_resolution.replace('p', ''))
+        max_height = int(max_resolution.replace('p', ''))
+        
+        # Format selector: best video between min and max resolution + best audio
+        format_selector = f"bestvideo[height>={min_height}][height<={max_height}]+bestaudio/best[height>={min_height}][height<={max_height}]"
+        if format_preference.lower() == "mp4":
+            format_selector += f"/best[ext=mp4][height<={max_height}]/best[height<={max_height}]"
+        
+        logger.debug(f"Format selector: {format_selector} (resolution: {min_resolution} to {max_resolution})")
     
     # Configure yt-dlp options
     ydl_opts = {
         'format': format_selector,
-        'outtmpl': str(filepath.with_suffix('')),  # yt-dlp will add extension
-        'merge_output_format': 'mp4',
+        'outtmpl': outtmpl_path,
         'quiet': False,
         'no_warnings': False,
         'progress_hooks': [DownloadProgressHook(video_title, logger)],
     }
+    
+    if audio_only and 'postprocessors' in locals() and postprocessors:
+         ydl_opts['postprocessors'] = postprocessors
+    
+    if not audio_only:
+        ydl_opts['merge_output_format'] = 'mp4'
     
     # Add authentication options
     if cookies_file:
@@ -160,11 +233,28 @@ def download_video(
             
             # Verify file was created
             # yt-dlp might add different extensions, so check for common ones
-            possible_files = [
-                filepath.with_suffix('.mp4'),
-                filepath.with_suffix('.webm'),
-                filepath.with_suffix('.mkv'),
-            ]
+            # Verify file was created
+            possible_files = []
+            if audio_only:
+                if audio_format and audio_format != 'best':
+                    possible_files.append((Path(download_path) / filename_base).with_suffix(f".{audio_format}"))
+                
+                # Also check common extensions in case conversion failed or 'best' was used
+                possible_files.extend([
+                    (Path(download_path) / filename_base).with_suffix('.mp3'),
+                    (Path(download_path) / filename_base).with_suffix('.m4a'),
+                    (Path(download_path) / filename_base).with_suffix('.webm'),
+                    (Path(download_path) / filename_base).with_suffix('.opus'),
+                    (Path(download_path) / filename_base).with_suffix('.flac'),
+                    (Path(download_path) / filename_base).with_suffix('.wav'),
+                ])
+            else:
+                video_file_base = Path(download_path) / filename_base
+                possible_files = [
+                    video_file_base.with_suffix('.mp4'),
+                    video_file_base.with_suffix('.webm'),
+                    video_file_base.with_suffix('.mkv'),
+                ]
             
             downloaded_file = None
             for possible_file in possible_files:
@@ -173,8 +263,8 @@ def download_video(
                     break
             
             if downloaded_file:
-                # Rename to .mp4 if needed
-                if downloaded_file.suffix != '.mp4':
+                # Rename to .mp4 if needed (video only)
+                if not audio_only and downloaded_file.suffix != '.mp4':
                     final_path = downloaded_file.with_suffix('.mp4')
                     downloaded_file.rename(final_path)
                     downloaded_file = final_path
@@ -188,7 +278,7 @@ def download_video(
                     except Exception as e:
                         logger.warning(f"Could not update tracker: {e}")
                 
-                logger.info(f"Successfully downloaded: {filename}")
+                logger.info(f"Successfully downloaded: {downloaded_file.name}")
                 return {
                     'success': True,
                     'filepath': str(downloaded_file),
@@ -258,7 +348,9 @@ def download_playlist(
     resume: bool = True,
     tracker_file: Optional[str] = None,
     cookies_file: Optional[str] = None,
-    cookies_from_browser: Optional[str] = None
+    cookies_from_browser: Optional[str] = None,
+    audio_only: bool = False,
+    audio_format: str = "best"
 ) -> Dict[str, Any]:
     """
     Download multiple videos with concurrent downloads.
@@ -276,12 +368,17 @@ def download_playlist(
         tracker_file: Path to download tracker file
         cookies_file: Path to cookies file
         cookies_from_browser: Browser to extract cookies from
+        audio_only: Download audio only
+        audio_format: Audio format preference
         
     Returns:
         Dictionary with download statistics
     """
     logger.info(f"Starting download of {len(videos)} videos...")
     
+    skipped_count = 0  # Initialize skipped count
+    original_video_count = len(videos)
+
     # Filter out already downloaded videos if resume is enabled
     if resume:
         try:
@@ -301,6 +398,15 @@ def download_playlist(
                     video_id_match = re.search(r'([a-zA-Z0-9_-]{11})$', filename)
                     if video_id_match:
                         downloaded_ids.add(video_id_match.group(1))
+                
+                # If audio only, we also need to check common audio extensions
+                if audio_only:
+                     for file in download_dir.glob("*"):
+                         if file.suffix in ['.mp3', '.m4a', '.webm', '.opus', '.flac', '.wav']:
+                            filename = file.stem
+                            video_id_match = re.search(r'([a-zA-Z0-9_-]{11})$', filename)
+                            if video_id_match:
+                                downloaded_ids.add(video_id_match.group(1))
         
         videos_to_download = [
             v for v in videos 
@@ -314,10 +420,10 @@ def download_playlist(
     if not videos:
         logger.info("All videos are already downloaded!")
         return {
-            'total': 0,
+            'total': original_video_count,
             'successful': 0,
             'failed': 0,
-            'skipped': len(videos) if not resume else 0,
+            'skipped': skipped_count,
             'results': []
         }
     
@@ -342,7 +448,9 @@ def download_playlist(
                 video.get('index'),
                 tracker_file,
                 cookies_file,
-                cookies_from_browser
+                cookies_from_browser,
+                audio_only,
+                audio_format
             ): video
             for video in videos
         }
@@ -374,10 +482,10 @@ def download_playlist(
     logger.info(f"Download complete: {successful} successful, {failed} failed, {skipped} skipped")
     
     return {
-        'total': len(videos),
+        'total': original_video_count,
         'successful': successful,
         'failed': failed,
-        'skipped': skipped,
+        'skipped': skipped + skipped_count,
         'results': results
     }
 

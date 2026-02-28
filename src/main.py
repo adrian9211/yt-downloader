@@ -65,6 +65,11 @@ def main():
         help='Only download from cached playlist, do not fetch'
     )
     parser.add_argument(
+        '--audio-only',
+        action='store_true',
+        help='Download extracted audio only (highest quality)'
+    )
+    parser.add_argument(
         '--playlist-id',
         type=str,
         help='Specific playlist ID to download from (instead of Watch Later)'
@@ -201,7 +206,9 @@ def main():
             resume=config.get('resume_downloads', True),
             tracker_file=config.get('download_tracker_file', './data/downloaded_videos.json'),
             cookies_file=config.get('cookies_file'),
-            cookies_from_browser=config.get('cookies_from_browser')
+            cookies_from_browser=config.get('cookies_from_browser'),
+            audio_only=args.audio_only or config.get('audio_only', False),
+            audio_format=config.get('audio_format', 'best')
         )
         
         # Log summary

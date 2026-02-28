@@ -7,6 +7,9 @@ from pathlib import Path
 from datetime import datetime
 import logging
 from typing import Dict, Any, Optional
+import threading
+
+_tracker_lock = threading.Lock()
 
 
 def sanitize_filename(filename: str, max_length: int = 200) -> str:
@@ -160,8 +163,21 @@ def save_download_tracker(tracker: Dict[str, Dict[str, Any]], tracker_file: str)
     tracker_path = Path(tracker_file)
     tracker_path.parent.mkdir(parents=True, exist_ok=True)
     
-    with open(tracker_path, 'w', encoding='utf-8') as f:
-        json.dump(tracker, f, indent=2, ensure_ascii=False)
+    # Atomic write: write to temp file then rename with os.replace
+    # This prevents the file from being empty/corrupt if the process crashes during write
+    # or if another process reads it while it's being written
+    temp_file = tracker_path.with_suffix('.tmp')
+    try:
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(tracker, f, indent=2, ensure_ascii=False)
+        os.replace(temp_file, tracker_path)
+    except Exception as e:
+        if temp_file.exists():
+            try:
+                os.remove(temp_file)
+            except OSError:
+                pass
+        raise e
 
 
 def mark_video_downloaded(
@@ -181,18 +197,19 @@ def mark_video_downloaded(
         tracker_file: Path to the tracker JSON file
         file_size: Optional file size in bytes
     """
-    tracker = load_download_tracker(tracker_file)
-    
-    tracker[video_id] = {
-        'video_id': video_id,
-        'title': video_title,
-        'filepath': filepath,
-        'download_date': datetime.now().isoformat(),
-        'file_size': file_size,
-        'status': 'downloaded'
-    }
-    
-    save_download_tracker(tracker, tracker_file)
+    with _tracker_lock:
+        tracker = load_download_tracker(tracker_file)
+        
+        tracker[video_id] = {
+            'video_id': video_id,
+            'title': video_title,
+            'filepath': filepath,
+            'download_date': datetime.now().isoformat(),
+            'file_size': file_size,
+            'status': 'downloaded'
+        }
+        
+        save_download_tracker(tracker, tracker_file)
 
 
 def is_video_downloaded(video_id: str, tracker_file: str) -> bool:
