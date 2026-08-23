@@ -18,5 +18,5 @@
   "format_preference": "mp4",
   "default_playlist_name": "Do obejrzenia",
   "cookies_file": null,
-  "cookies_from_browser": null
+  "cookies_from_browser": "safari"
 }

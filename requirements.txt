@@ -1,4 +1,8 @@
-yt-dlp>=2026.1.31
+yt-dlp>=2026.8.19
+# Bundles the JS challenge solver script YouTube now requires.
+# Without it yt-dlp reports "Only images are available for download".
+# Also needs a JS runtime on PATH (deno or node).
+yt-dlp-ejs>=0.8.0
 google-auth>=2.23.0
 google-auth-oauthlib>=1.1.0
 google-auth-httplib2>=0.1.1

@@ -198,7 +198,9 @@ def download_video(
         format_selector = f"bestvideo[height>={min_height}][height<={max_height}]+bestaudio/best[height>={min_height}][height<={max_height}]"
         if format_preference.lower() == "mp4":
             format_selector += f"/best[ext=mp4][height<={max_height}]/best[height<={max_height}]"
-        
+        # Last resort: a video outside the min/max window is still better than a failed download
+        format_selector += "/best"
+
         logger.debug(f"Format selector: {format_selector} (resolution: {min_resolution} to {max_resolution})")
     
     # Configure yt-dlp options
